@@ -67,6 +67,7 @@ type NativeClient struct {
 type Auth struct {
 	Passwords []string // Passwords is a slice of passwords to submit to the server
 	Keys      []string // Keys is a slice of filenames of keys to try
+	RawKeys   [][]byte // RawKeys is a slice of private keys to try
 }
 
 // NewNativeClient creates a new Client using the golang ssh library
@@ -95,12 +96,17 @@ func NewNativeConfig(user, clientVersion string, auth *Auth, hostKeyCallback ssh
 	)
 
 	if auth != nil {
+		rawKeys := auth.RawKeys
 		for _, k := range auth.Keys {
 			key, err := ioutil.ReadFile(k)
 			if err != nil {
 				return ssh.ClientConfig{}, err
 			}
 
+			rawKeys = append(rawKeys, key)
+		}
+
+		for _, key := range rawKeys {
 			privateKey, err := ssh.ParsePrivateKey(key)
 			if err != nil {
 				return ssh.ClientConfig{}, err
