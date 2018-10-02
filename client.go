@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/machine/libmachine/log"
@@ -67,6 +68,61 @@ type NativeClient struct {
 type Auth struct {
 	Passwords []string // Passwords is a slice of passwords to submit to the server
 	Keys      []string // Keys is a slice of filenames of keys to try
+}
+
+// Config is used to create new client.
+type Config struct {
+	User    string              // username to connect as, required
+	Host    string              // hostname to connect to, required
+	Version string              // ssh client version, "SSH-2.0-Go" by default
+	Port    int                 // port to connect to, 22 by default
+	Auth    *Auth               // authentication methods to use
+	Timeout time.Duration       // connect timeout, 30s by default
+	HostKey ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
+}
+
+func (cfg *Config) version() string {
+	if cfg.Version != "" {
+		return cfg.Version
+	}
+	return "SSH-2.0-Go"
+}
+
+func (cfg *Config) port() int {
+	if cfg.Port != 0 {
+		return cfg.Port
+	}
+	return 22
+}
+
+func (cfg *Config) timeout() time.Duration {
+	if cfg.Timeout != 0 {
+		return cfg.Timeout
+	}
+	return 30 * time.Second
+}
+
+func (cfg *Config) hostKey() ssh.HostKeyCallback {
+	if cfg.HostKey != nil {
+		return cfg.HostKey
+	}
+	return ssh.InsecureIgnoreHostKey()
+}
+
+// NewClient creates a new Client using the golang ssh library.
+func NewClient(cfg *Config) (Client, error) {
+	config, err := NewNativeConfig(cfg.User, cfg.version(), cfg.Auth, cfg.hostKey())
+	if err != nil {
+		return nil, fmt.Errorf("Error getting config for native Go SSH: %s", err)
+	}
+	config.Timeout = cfg.timeout()
+
+	return &NativeClient{
+		Config:        config,
+		Hostname:      cfg.Host,
+		Port:          cfg.port(),
+		ClientVersion: cfg.version(),
+	}, nil
 }
 
 // NewNativeClient creates a new Client using the golang ssh library
