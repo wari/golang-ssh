@@ -18,11 +18,13 @@
 package ssh
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +34,39 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 )
+
+// ExitError is a conveniance wrapper for (crypto/ssh).ExitError type.
+type ExitError struct {
+	Err      error
+	ExitCode int
+}
+
+// Error implements error interface.
+func (err *ExitError) Error() string {
+	return err.Err.Error()
+}
+
+// Cause implements errors.Causer interface.
+func (err *ExitError) Cause() error {
+	return err.Err
+}
+
+func wrapError(err error) error {
+	switch err := err.(type) {
+	case *ssh.ExitError:
+		e, s := &ExitError{Err: err, ExitCode: -1}, strings.TrimSpace(err.Error())
+		// Best-effort attempt to parse exit code from os/exec error string,
+		// like "Process exited with status 127".
+		if i := strings.LastIndex(s, " "); i != -1 {
+			if n, err := strconv.Atoi(s[i+1:]); err == nil {
+				e.ExitCode = n
+			}
+		}
+		return e
+	default:
+		return err
+	}
+}
 
 // Client is a relic interface that both native and external client matched
 type Client interface {
@@ -207,13 +242,13 @@ func (client *NativeClient) session(command string) (*ssh.Session, error) {
 func (client *NativeClient) Output(command string) (string, error) {
 	session, err := client.session(command)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	output, err := session.CombinedOutput(command)
 	defer session.Close()
 
-	return string(output), err
+	return string(bytes.TrimSpace(output)), wrapError(err)
 }
 
 // Output returns the output of the command run on the remote host as well as a pty.
@@ -245,7 +280,7 @@ func (client *NativeClient) OutputWithPty(command string) (string, error) {
 	output, err := session.CombinedOutput(command)
 	defer session.Close()
 
-	return string(output), err
+	return string(bytes.TrimSpace(output)), wrapError(err)
 }
 
 // Start starts the specified command without waiting for it to finish. You
