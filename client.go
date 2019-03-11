@@ -20,7 +20,6 @@ package ssh
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -28,8 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/machine/libmachine/log"
-	"github.com/docker/machine/libmachine/mcnutils"
 	"github.com/moby/moby/pkg/term"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
@@ -63,103 +60,21 @@ type NativeClient struct {
 	Hostname      string           // Hostname is the host to connect to
 	Port          int              // Port is the port to connect to
 	ClientVersion string           // ClientVersion is the version string to send to the server when identifying
+	DialRetry     int              // number of dial retries
 	openSession   *ssh.Session
-}
-
-// AuthPassword creates an AuthMethod for password authentication.
-func AuthPassword(password string) ssh.AuthMethod {
-	return ssh.Password(password)
-}
-
-// AuthKey creates an AuthMethod for SSH key authentication.
-func AuthKey(r io.Reader) (ssh.AuthMethod, error) {
-	key, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read key: %s", err)
-	}
-	privateKey, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %s", err)
-	}
-	return ssh.PublicKeys(privateKey), nil
-}
-
-// AuthKey creates an AuthMethod for SSH key authentication from a key file.
-func AuthKeyFile(keyFilename string) (ssh.AuthMethod, error) {
-	key, err := ioutil.ReadFile(keyFilename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read key file %s: %s", keyFilename, err)
-	}
-	privateKey, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key %s: %s", keyFilename, err)
-	}
-	return ssh.PublicKeys(privateKey), nil
-}
-
-// AuthCert creates an AuthMethod for SSH certificate authentication from the key
-// and certificate bytes.
-func AuthCert(keyReader, certReader io.Reader) (ssh.AuthMethod, error) {
-	key, err := ioutil.ReadAll(keyReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read private key: %s", err)
-	}
-	cert, err := ioutil.ReadAll(certReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to reate certificate: %s", err)
-	}
-	privateKey, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %s", err)
-	}
-	certificate, err := ParseCertificate(cert)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse certificate: %s", err)
-	}
-	signer, err := ssh.NewCertSigner(certificate, privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("key and certificate do not match: %s", err)
-	}
-	return ssh.PublicKeys(signer), nil
-}
-
-// AuthCertFile creates an AuthMethod for SSH certificate authentication from the
-// key and certicate files.
-func AuthCertFile(keyFilename, certFilename string) (ssh.AuthMethod, error) {
-	key, err := os.Open(keyFilename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open key file %s: %s", keyFilename, err)
-	}
-	defer key.Close()
-	cert, err := os.Open(certFilename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open certificate file %s: %s", certFilename, err)
-	}
-	defer cert.Close()
-	return AuthCert(key, cert)
-}
-
-func ParseCertificate(cert []byte) (*ssh.Certificate, error) {
-	out, _, _, _, err := ssh.ParseAuthorizedKey(cert)
-	if err != nil {
-		return nil, err
-	}
-	c, ok := out.(*ssh.Certificate)
-	if !ok {
-		return nil, errors.New("the provided key is not a SSH certificate")
-	}
-	return c, nil
+	openClient    *ssh.Client
 }
 
 // Config is used to create new client.
 type Config struct {
-	User    string              // username to connect as, required
-	Host    string              // hostname to connect to, required
-	Version string              // ssh client version, "SSH-2.0-Go" by default
-	Port    int                 // port to connect to, 22 by default
-	Auth    []ssh.AuthMethod    // authentication methods to use
-	Timeout time.Duration       // connect timeout, 30s by default
-	HostKey ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
+	User      string              // username to connect as, required
+	Host      string              // hostname to connect to, required
+	Version   string              // ssh client version, "SSH-2.0-Go" by default
+	Port      int                 // port to connect to, 22 by default
+	Auth      []ssh.AuthMethod    // authentication methods to use
+	Timeout   time.Duration       // connect timeout, 30s by default
+	DialRetry int                 // number of dial retries, 0 (no retries) by default
+	HostKey   ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
 }
 
 func (cfg *Config) version() string {
@@ -180,7 +95,7 @@ func (cfg *Config) timeout() time.Duration {
 	if cfg.Timeout != 0 {
 		return cfg.Timeout
 	}
-	return 30 * time.Second
+	return 15 * time.Second
 }
 
 func (cfg *Config) hostKey() ssh.HostKeyCallback {
@@ -203,6 +118,7 @@ func NewClient(cfg *Config) (Client, error) {
 		Hostname:      cfg.Host,
 		Port:          cfg.port(),
 		ClientVersion: cfg.version(),
+		DialRetry:     cfg.DialRetry,
 	}, nil
 }
 
@@ -239,46 +155,50 @@ func NewNativeConfig(user, clientVersion string, hostKeyCallback ssh.HostKeyCall
 	}, nil
 }
 
-func (client *NativeClient) dialSuccess() bool {
-	if _, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", client.Hostname, client.Port), &client.Config); err != nil {
-		log.Debugf("Error dialing TCP: %s", err)
-		return false
-	}
-	return true
+func (client *NativeClient) addr() string {
+	return fmt.Sprintf("%s:%d", client.Hostname, client.Port)
 }
 
-func (client *NativeClient) session(command string) (*ssh.Session, error) {
-	if err := mcnutils.WaitFor(client.dialSuccess); err != nil {
-		return nil, fmt.Errorf("Error attempting SSH client dial: %s", err)
+func (client *NativeClient) newSession() (*ssh.Session, *ssh.Client, error) {
+	var conn *ssh.Client
+	var err error
+	for i := client.DialRetry + 1; i > 0; i-- {
+		conn, err = ssh.Dial("tcp", client.addr(), &client.Config)
+		if err == nil {
+			break
+		}
+		time.Sleep(3 * time.Second) // backoff?
 	}
-
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", client.Hostname, client.Port), &client.Config)
 	if err != nil {
-		return nil, fmt.Errorf("Mysterious error dialing TCP for SSH (we already succeeded at least once) : %s", err)
+		return nil, nil, fmt.Errorf("Error attempting SSH client dial: %s", err)
 	}
-
-	return conn.NewSession()
+	session, err := conn.NewSession()
+	if err != nil {
+		return nil, nil, nonil(err, conn.Close())
+	}
+	return session, conn, nil
 }
 
 // Output returns the output of the command run on the remote host.
 func (client *NativeClient) Output(command string) (string, error) {
-	session, err := client.session(command)
+	session, conn, err := client.newSession()
 	if err != nil {
 		return "", err
 	}
 
 	output, err := session.CombinedOutput(command)
-	defer session.Close()
-
+	_, _ = session.Close(), conn.Close()
 	return string(bytes.TrimSpace(output)), wrapError(err)
 }
 
 // Output returns the output of the command run on the remote host as well as a pty.
 func (client *NativeClient) OutputWithPty(command string) (string, error) {
-	session, err := client.session(command)
+	session, conn, err := client.newSession()
 	if err != nil {
 		return "", nil
 	}
+	defer session.Close()
+	defer conn.Close()
 
 	fd := int(os.Stdin.Fd())
 
@@ -300,7 +220,6 @@ func (client *NativeClient) OutputWithPty(command string) (string, error) {
 	}
 
 	output, err := session.CombinedOutput(command)
-	defer session.Close()
 
 	return string(bytes.TrimSpace(output)), wrapError(err)
 }
@@ -308,24 +227,24 @@ func (client *NativeClient) OutputWithPty(command string) (string, error) {
 // Start starts the specified command without waiting for it to finish. You
 // have to call the Wait function for that.
 func (client *NativeClient) Start(command string) (io.ReadCloser, io.ReadCloser, error) {
-	session, err := client.session(command)
+	session, conn, err := client.newSession()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nonil(err, session.Close(), conn.Close())
 	}
 	stderr, err := session.StderrPipe()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nonil(err, session.Close(), conn.Close())
 	}
 	if err := session.Start(command); err != nil {
-		return nil, nil, err
+		return nil, nil, nonil(err, session.Close(), conn.Close())
 	}
-
 	client.openSession = session
+	client.openClient = conn
 	return ioutil.NopCloser(stdout), ioutil.NopCloser(stderr), nil
 }
 
@@ -333,8 +252,8 @@ func (client *NativeClient) Start(command string) (io.ReadCloser, io.ReadCloser,
 // returned error follows the same logic as in the exec.Cmd.Wait function.
 func (client *NativeClient) Wait() error {
 	err := client.openSession.Wait()
-	_ = client.openSession.Close()
-	client.openSession = nil
+	_, _ = client.openSession.Close(), client.openClient.Close()
+	client.openSession, client.openClient = nil, nil
 	return err
 }
 
@@ -344,10 +263,11 @@ func (client *NativeClient) Shell(args ...string) error {
 	var (
 		termWidth, termHeight = 80, 24
 	)
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", client.Hostname, client.Port), &client.Config)
+	conn, err := ssh.Dial("tcp", client.addr(), &client.Config)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	session, err := conn.NewSession()
 	if err != nil {
@@ -385,19 +305,17 @@ func (client *NativeClient) Shell(args ...string) error {
 		return err
 	}
 
-	if len(args) == 0 {
-		if err := session.Shell(); err != nil {
-			return err
-		}
-
-		// monitor for sigwinch
-		go monWinCh(session, os.Stdout.Fd())
-
-		session.Wait()
-	} else {
+	if len(args) != 0 {
 		session.Run(strings.Join(args, " "))
+		return nil
 	}
 
+	if err := session.Shell(); err != nil {
+		return err
+	}
+	// monitor for sigwinch
+	go monWinCh(session, os.Stdout.Fd())
+	session.Wait()
 	return nil
 }
 

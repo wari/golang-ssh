@@ -29,26 +29,6 @@
   version = "v1.13.1"
 
 [[projects]]
-  digest = "1:7b21b6165988ae29227438d56b8f438048f77b081b632b8c89388545534da32c"
-  name = "github.com/docker/machine"
-  packages = [
-    "libmachine/log",
-    "libmachine/mcnutils",
-    "version",
-  ]
-  pruneopts = "UT"
-  revision = "cce350d75c529cf6e77328d9dd0477357e04a776"
-  version = "v0.16.1"
-
-[[projects]]
-  branch = "master"
-  digest = "1:89df516e4ec36be36c4ccc661f2e9007ccb13d4e970e3b7e9c96e87fe4ceb5ba"
-  name = "github.com/jcelliott/lumber"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "dd349441af25132d146d7095c6693a15431fc9b1"
-
-[[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
@@ -97,9 +77,6 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/docker/machine/libmachine/log",
-    "github.com/docker/machine/libmachine/mcnutils",
-    "github.com/jcelliott/lumber",
     "github.com/moby/moby/pkg/term",
     "golang.org/x/crypto/ssh",
     "golang.org/x/crypto/ssh/terminal",
