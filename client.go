@@ -1,15 +1,3 @@
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 // Package ssh is a helper for working with ssh in go.  The client implementation
 // is a modified version of `docker/machine/libmachine/ssh/client.go` and only
 // uses golang's native ssh client. It has also been improved to resize the tty
@@ -19,10 +7,10 @@ package ssh
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -32,138 +20,79 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-// Client is a relic interface that both native and external client matched
-type Client interface {
-	// Output returns the output of the command run on the remote host.
-	Output(command string) (string, error)
-
-	// Shell requests a shell from the remote. If an arg is passed, it tries to
-	// exec them on the server.
-	Shell(args ...string) error
-
-	// Start starts the specified command without waiting for it to finish. You
-	// have to call the Wait function for that.
-	//
-	// The first two io.ReadCloser are the standard output and the standard
-	// error of the executing command respectively. The returned error follows
-	// the same logic as in the exec.Cmd.Start function.
-	Start(command string) (io.ReadCloser, io.ReadCloser, error)
-
-	// Wait waits for the command started by the Start function to exit. The
-	// returned error follows the same logic as in the exec.Cmd.Wait function.
-	Wait() error
+type Client struct {
+	Config
+	openSession *ssh.Session
+	openClient  *ssh.Client
 }
 
-// NativeClient is the structure for native client use
-type NativeClient struct {
-	Config        ssh.ClientConfig // Config defines the golang ssh client config
-	Hostname      string           // Hostname is the host to connect to
-	Port          int              // Port is the port to connect to
-	ClientVersion string           // ClientVersion is the version string to send to the server when identifying
-	DialRetry     int              // number of dial retries
-	openSession   *ssh.Session
-	openClient    *ssh.Client
-}
-
-// Config is used to create new client.
 type Config struct {
-	User      string              // username to connect as, required
-	Host      string              // hostname to connect to, required
-	Version   string              // ssh client version, "SSH-2.0-Go" by default
-	Port      int                 // port to connect to, 22 by default
-	Auth      []ssh.AuthMethod    // authentication methods to use
-	Timeout   time.Duration       // connect timeout, 30s by default
-	DialRetry int                 // number of dial retries, 0 (no retries) by default
-	HostKey   ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
+	User          string              // username to connect as, required
+	Host          string              // hostname to connect to, required
+	ClientVersion string              // ssh client version, "SSH-2.0-Go" by default
+	Port          int                 // port to connect to, 22 by default
+	Auth          []ssh.AuthMethod    // authentication methods to use
+	Timeout       time.Duration       // connect timeout, 30s by default
+	DialRetry     int                 // number of dial retries, 0 (no retries) by default
+	HostKey       ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
 }
 
-func (cfg *Config) version() string {
-	if cfg.Version != "" {
-		return cfg.Version
+func (cfg Config) version() string {
+	if cfg.ClientVersion != "" {
+		return cfg.ClientVersion
 	}
 	return "SSH-2.0-Go"
 }
 
-func (cfg *Config) port() int {
+func (cfg Config) port() int {
 	if cfg.Port != 0 {
 		return cfg.Port
 	}
 	return 22
 }
 
-func (cfg *Config) timeout() time.Duration {
+func (cfg Config) timeout() time.Duration {
 	if cfg.Timeout != 0 {
 		return cfg.Timeout
 	}
 	return 15 * time.Second
 }
 
-func (cfg *Config) hostKey() ssh.HostKeyCallback {
+func (cfg Config) hostKey() ssh.HostKeyCallback {
 	if cfg.HostKey != nil {
 		return cfg.HostKey
 	}
 	return ssh.InsecureIgnoreHostKey()
 }
 
+func (cfg Config) addr() string {
+	return net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
+}
+
+func (cfg Config) native() *ssh.ClientConfig {
+	return &ssh.ClientConfig{
+		User:            cfg.User,
+		Auth:            cfg.Auth,
+		ClientVersion:   cfg.version(),
+		HostKeyCallback: cfg.hostKey(),
+		Timeout:         cfg.timeout(),
+	}
+}
+
 // NewClient creates a new Client using the golang ssh library.
-func NewClient(cfg *Config) (Client, error) {
-	config, err := NewNativeConfig(cfg.User, cfg.version(), cfg.hostKey(), cfg.Auth...)
-	if err != nil {
-		return nil, fmt.Errorf("Error getting config for native Go SSH: %s", err)
+func NewClient(cfg Config) *Client {
+	return &Client{
+		Config: cfg,
 	}
-	config.Timeout = cfg.timeout()
-
-	return &NativeClient{
-		Config:        config,
-		Hostname:      cfg.Host,
-		Port:          cfg.port(),
-		ClientVersion: cfg.version(),
-		DialRetry:     cfg.DialRetry,
-	}, nil
 }
 
-// NewNativeClient creates a new Client using the golang ssh library
-func NewNativeClient(user, host, clientVersion string, port int, hostKeyCallback ssh.HostKeyCallback, auth ...ssh.AuthMethod) (Client, error) {
-	if clientVersion == "" {
-		clientVersion = "SSH-2.0-Go"
-	}
-
-	config, err := NewNativeConfig(user, clientVersion, hostKeyCallback, auth...)
-	if err != nil {
-		return nil, fmt.Errorf("Error getting config for native Go SSH: %s", err)
-	}
-
-	return &NativeClient{
-		Config:        config,
-		Hostname:      host,
-		Port:          port,
-		ClientVersion: clientVersion,
-	}, nil
-}
-
-// NewNativeConfig returns a golang ssh client config struct for use by the NativeClient
-func NewNativeConfig(user, clientVersion string, hostKeyCallback ssh.HostKeyCallback, auth ...ssh.AuthMethod) (ssh.ClientConfig, error) {
-	if hostKeyCallback == nil {
-		hostKeyCallback = ssh.InsecureIgnoreHostKey()
-	}
-
-	return ssh.ClientConfig{
-		User:            user,
-		Auth:            auth,
-		ClientVersion:   clientVersion,
-		HostKeyCallback: hostKeyCallback,
-	}, nil
-}
-
-func (client *NativeClient) addr() string {
-	return fmt.Sprintf("%s:%d", client.Hostname, client.Port)
-}
-
-func (client *NativeClient) newSession() (*ssh.Session, *ssh.Client, error) {
+func (client *Client) newSession() (*ssh.Session, *ssh.Client, error) {
 	var conn *ssh.Client
 	var err error
-	for i := client.DialRetry + 1; i > 0; i-- {
-		conn, err = ssh.Dial("tcp", client.addr(), &client.Config)
+	addr := client.Config.addr()
+	nconfig := client.Config.native()
+	for i := client.Config.DialRetry + 1; i > 0; i-- {
+		conn, err = ssh.Dial("tcp", addr, nconfig)
 		if err == nil {
 			break
 		}
@@ -180,7 +109,7 @@ func (client *NativeClient) newSession() (*ssh.Session, *ssh.Client, error) {
 }
 
 // Output returns the output of the command run on the remote host.
-func (client *NativeClient) Output(command string) (string, error) {
+func (client *Client) Output(command string) (string, error) {
 	session, conn, err := client.newSession()
 	if err != nil {
 		return "", err
@@ -192,7 +121,7 @@ func (client *NativeClient) Output(command string) (string, error) {
 }
 
 // Output returns the output of the command run on the remote host as well as a pty.
-func (client *NativeClient) OutputWithPty(command string) (string, error) {
+func (client *Client) OutputWithPty(command string) (string, error) {
 	session, conn, err := client.newSession()
 	if err != nil {
 		return "", nil
@@ -226,7 +155,7 @@ func (client *NativeClient) OutputWithPty(command string) (string, error) {
 
 // Start starts the specified command without waiting for it to finish. You
 // have to call the Wait function for that.
-func (client *NativeClient) Start(command string) (io.ReadCloser, io.ReadCloser, error) {
+func (client *Client) Start(command string) (io.ReadCloser, io.ReadCloser, error) {
 	session, conn, err := client.newSession()
 	if err != nil {
 		return nil, nil, err
@@ -250,20 +179,26 @@ func (client *NativeClient) Start(command string) (io.ReadCloser, io.ReadCloser,
 
 // Wait waits for the command started by the Start function to exit. The
 // returned error follows the same logic as in the exec.Cmd.Wait function.
-func (client *NativeClient) Wait() error {
-	err := client.openSession.Wait()
-	_, _ = client.openSession.Close(), client.openClient.Close()
-	client.openSession, client.openClient = nil, nil
+func (client *Client) Wait() (err error) {
+	if client.openSession != nil {
+		err = client.openSession.Wait()
+		_ = client.openSession.Close()
+		client.openSession = nil
+	}
+	if client.openClient != nil {
+		_ = client.openClient.Close()
+		client.openClient = nil
+	}
 	return err
 }
 
 // Shell requests a shell from the remote. If an arg is passed, it tries to
 // exec them on the server.
-func (client *NativeClient) Shell(args ...string) error {
+func (client *Client) Shell(args ...string) error {
 	var (
 		termWidth, termHeight = 80, 24
 	)
-	conn, err := ssh.Dial("tcp", client.addr(), &client.Config)
+	conn, err := ssh.Dial("tcp", client.Config.addr(), client.Config.native())
 	if err != nil {
 		return err
 	}
@@ -317,22 +252,4 @@ func (client *NativeClient) Shell(args ...string) error {
 	go monWinCh(session, os.Stdout.Fd())
 	session.Wait()
 	return nil
-}
-
-// termSize gets the current window size and returns it in a window-change friendly
-// format.
-func termSize(fd uintptr) []byte {
-	size := make([]byte, 16)
-
-	winsize, err := term.GetWinsize(fd)
-	if err != nil {
-		binary.BigEndian.PutUint32(size, uint32(80))
-		binary.BigEndian.PutUint32(size[4:], uint32(24))
-		return size
-	}
-
-	binary.BigEndian.PutUint32(size, uint32(winsize.Width))
-	binary.BigEndian.PutUint32(size[4:], uint32(winsize.Height))
-
-	return size
 }
