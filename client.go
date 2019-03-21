@@ -124,7 +124,7 @@ func (client *Client) Output(ctx context.Context, command string, stdout, stderr
 		select {
 		case <-lctx.Done():
 		case <-ctx.Done():
-			session.Signal(ssh.SIGTERM)
+			_ = session.Close()
 		}
 	}()
 	err = wrapError(session.Run(command))
@@ -166,7 +166,7 @@ func (client *Client) OutputWithPty(ctx context.Context, command string, stdout,
 		select {
 		case <-lctx.Done():
 		case <-ctx.Done():
-			session.Signal(ssh.SIGTERM)
+			_ = session.Close()
 		}
 	}()
 
@@ -267,7 +267,7 @@ func (client *Client) Shell(ctx context.Context, args ...string) error {
 		select {
 		case <-lctx.Done():
 		case <-ctx.Done():
-			session.Signal(ssh.SIGTERM)
+			_ = session.Close()
 		}
 	}()
 
