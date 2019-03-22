@@ -205,7 +205,7 @@ func Output(ctx context.Context, config Config, command string, stdout, stderr i
 }
 
 // Output returns the output of the command run on the remote host as well as a pty.
-func OutputWithPty(ctx context.Context, config Config, command string, stdin io.Reader, stdout, stderr io.Writer) error {
+func OutputWithPty(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
 	session, conn, err := newSession(config)
 	if err != nil {
 		return err
@@ -232,7 +232,6 @@ func OutputWithPty(ctx context.Context, config Config, command string, stdin io.
 		return err
 	}
 
-	session.Stdin = stdin
 	session.Stdout = stdout
 	session.Stderr = stderr
 
