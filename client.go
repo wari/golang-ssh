@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/moby/moby/pkg/term"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -77,6 +78,14 @@ func (cfg Config) ToNative() *ssh.ClientConfig {
 		HostKeyCallback: cfg.GetHostKeyCallback(),
 		Timeout:         cfg.GetTimeout(),
 	}
+}
+
+func SFTP(cfg Config) (*sftp.Client, error) {
+	conn, err := dial(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return sftp.NewClient(conn)
 }
 
 // StartCommand starts the specified command without waiting for it to finish. You
