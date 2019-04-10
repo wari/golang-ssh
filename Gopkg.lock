@@ -37,6 +37,14 @@
   version = "v1.0.2"
 
 [[projects]]
+  digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
+  name = "github.com/mitchellh/go-homedir"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "af06845cf3004701891bf4fdb884bfe4920b3727"
+  version = "v1.1.0"
+
+[[projects]]
   digest = "1:0fd364cae8f486496f036edb44e322ffb4523fbb6ad1404d512623181fdff6c1"
   name = "github.com/moby/moby"
   packages = ["pkg/term"]
@@ -46,7 +54,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e86b06b02faaecaa9eb62062d3e7b65b58399b65a86056dbad6be5e5857e4598"
+  digest = "1:48f4970b272e3df27cfe72b6fe973976779d273c12473a3c6430c1e99235f827"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -56,6 +64,7 @@
     "internal/subtle",
     "poly1305",
     "ssh",
+    "ssh/knownhosts",
     "ssh/terminal",
   ]
   pruneopts = "UT"
@@ -77,8 +86,10 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/mitchellh/go-homedir",
     "github.com/moby/moby/pkg/term",
     "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/knownhosts",
     "golang.org/x/crypto/ssh/terminal",
   ]
   solver-name = "gps-cdcl"
