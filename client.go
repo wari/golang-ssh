@@ -81,7 +81,7 @@ func (cfg Config) ToNative() *ssh.ClientConfig {
 }
 
 func SFTP(cfg Config) (*sftp.Client, error) {
-	conn, err := dial(cfg)
+	conn, err := Dial(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func SFTP(cfg Config) (*sftp.Client, error) {
 // have to call the Wait function for that.
 func StartCommand(ctx context.Context, cfg Config, command string) (*Client, error) {
 	client := &Client{Cfg: cfg}
-	conn, err := dial(client.Cfg)
+	conn, err := Dial(client.Cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (client *Client) Wait() (err error) {
 	return nil
 }
 
-func dial(config Config) (*ssh.Client, error) {
+func Dial(config Config) (*ssh.Client, error) {
 	conn, err := ssh.Dial("tcp", config.GetAddr(), config.ToNative())
 	if err != nil {
 		return nil, err
@@ -188,7 +188,7 @@ func dial(config Config) (*ssh.Client, error) {
 
 // Output returns the output of the command run on the remote host.
 func Output(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
-	conn, err := dial(config)
+	conn, err := Dial(config)
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func Output(ctx context.Context, config Config, command string, stdout, stderr i
 
 // Output returns the output of the command run on the remote host as well as a pty.
 func OutputWithPty(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
-	conn, err := dial(config)
+	conn, err := Dial(config)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func Shell(ctx context.Context, config Config, stdin io.Reader, stdout, stderr i
 	var (
 		termWidth, termHeight = 80, 24
 	)
-	conn, err := dial(config)
+	conn, err := Dial(config)
 	if err != nil {
 		return err
 	}
