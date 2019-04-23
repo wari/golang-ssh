@@ -70,14 +70,18 @@ func (cfg Config) GetAddr() string {
 	return net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.GetPort()))
 }
 
-func (cfg Config) ToNative() *ssh.ClientConfig {
-	return &ssh.ClientConfig{
-		User:            cfg.User,
-		Auth:            cfg.Auth,
-		ClientVersion:   cfg.Version(),
-		HostKeyCallback: cfg.GetHostKeyCallback(),
-		Timeout:         cfg.GetTimeout(),
+func (cfg Config) ToNatives() []*ssh.ClientConfig {
+	natives := make([]*ssh.ClientConfig, 0, len(cfg.Auth))
+	for _, auth := range cfg.Auth {
+		natives = append(natives, &ssh.ClientConfig{
+			User:            cfg.User,
+			Auth:            []ssh.AuthMethod{auth},
+			ClientVersion:   cfg.Version(),
+			HostKeyCallback: cfg.GetHostKeyCallback(),
+			Timeout:         cfg.GetTimeout(),
+		})
 	}
+	return natives
 }
 
 func SFTP(cfg Config) (*sftp.Client, error) {
@@ -179,11 +183,15 @@ func (client *Client) Wait() (err error) {
 }
 
 func Dial(config Config) (*ssh.Client, error) {
-	conn, err := ssh.Dial("tcp", config.GetAddr(), config.ToNative())
-	if err != nil {
-		return nil, err
+	var err error
+	var conn *ssh.Client
+	for _, native := range config.ToNatives() {
+		conn, err = ssh.Dial("tcp", config.GetAddr(), native)
+		if err == nil {
+			return conn, nil
+		}
 	}
-	return conn, err
+	return nil, err
 }
 
 // Output returns the output of the command run on the remote host.
