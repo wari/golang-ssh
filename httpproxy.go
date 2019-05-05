@@ -73,18 +73,19 @@ func (proxy *HTTPConnectProxy) DialContext(ctx context.Context, network, addr st
 	defer func() {
 		if err != nil {
 			_ = c.Close()
+			c = nil
 		}
 	}()
 
 	reqURL, err := url.Parse("http://" + addr)
 	if err != nil {
-		return nil, err
+		return c, err
 	}
 	reqURL.Scheme = ""
 
 	req, err := http.NewRequest("CONNECT", reqURL.String(), nil)
 	if err != nil {
-		return nil, err
+		return c, err
 	}
 	req.Close = false
 	if proxy.HaveAuth {
@@ -96,17 +97,17 @@ func (proxy *HTTPConnectProxy) DialContext(ctx context.Context, network, addr st
 	}
 	err = req.Write(c)
 	if err != nil {
-		return nil, err
+		return c, err
 	}
 	resp, err := http.ReadResponse(bufio.NewReader(c), req)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
 	if err != nil {
-		return nil, err
+		return c, err
 	}
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("connect error: status %d", resp.StatusCode)
+		return c, fmt.Errorf("connect error: status %d", resp.StatusCode)
 	}
 	return c, nil
 }
