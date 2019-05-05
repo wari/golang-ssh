@@ -62,8 +62,8 @@ func (proxy *HTTPConnectProxy) DialContext(ctx context.Context, network, addr st
 					return nil, err
 				}
 			}
-			c = tlsConn
 		}
+		c = tlsConn
 	} else {
 		c, err = d.DialContext(ctx, "tcp", proxy.Host)
 	}
