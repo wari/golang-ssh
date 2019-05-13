@@ -10,6 +10,11 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// AuthKeyboardInteractive creates an AuthMethod for keyboard-interactive authentication.
+func AuthKeyboardInteractive(challenge ssh.KeyboardInteractiveChallenge) ssh.AuthMethod {
+	return ssh.KeyboardInteractive(challenge)
+}
+
 // AuthPassword creates an AuthMethod for password authentication.
 func AuthPassword(password string) ssh.AuthMethod {
 	return ssh.Password(password)
