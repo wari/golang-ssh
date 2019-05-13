@@ -1,12 +1,12 @@
+// +build darwin freebsd netbsd openbsd linux
+
 package ssh
 
 import (
-	"encoding/binary"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/moby/moby/pkg/term"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -22,21 +22,4 @@ func monWinCh(session *ssh.Session, fd uintptr) {
 	for range sigs {
 		_, _ = session.SendRequest("window-change", false, termSize(fd))
 	}
-}
-
-// termSize gets the current window size and returns it in a window-change friendly format.
-func termSize(fd uintptr) []byte {
-	size := make([]byte, 16)
-
-	winsize, err := term.GetWinsize(fd)
-	if err != nil {
-		binary.BigEndian.PutUint32(size, uint32(80))
-		binary.BigEndian.PutUint32(size[4:], uint32(24))
-		return size
-	}
-
-	binary.BigEndian.PutUint32(size, uint32(winsize.Width))
-	binary.BigEndian.PutUint32(size[4:], uint32(winsize.Height))
-
-	return size
 }
