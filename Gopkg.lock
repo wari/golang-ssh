@@ -53,12 +53,12 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:0fd364cae8f486496f036edb44e322ffb4523fbb6ad1404d512623181fdff6c1"
+  digest = "1:d40f7d95fbc7f8241cfe7cc211e26887a03b21ebc1a655d5c6db26abfed25f8e"
   name = "github.com/moby/moby"
   packages = ["pkg/term"]
   pruneopts = "UT"
-  revision = "eef6495eddab52828327aade186443681ed71a4e"
-  version = "v17.03.2-ce-rc1"
+  revision = "90d35abf7b3535c1c319c872900fbd76374e521c"
+  version = "v17.05.0-ce-rc3"
 
 [[projects]]
   digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
