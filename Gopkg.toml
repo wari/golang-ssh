@@ -1,6 +1,6 @@
 [[constraint]]
   name = "github.com/moby/moby"
-  version = "17.05.0-ce-rc1"  
+  version = "17.05.0-ce-rc3"  
 
 [[constraint]]
   name = "golang.org/x/crypto"

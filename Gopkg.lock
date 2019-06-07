@@ -13,12 +13,12 @@
   revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
 
 [[projects]]
-  digest = "1:87c2e02fb01c27060ccc5ba7c5a407cc91147726f8f40b70cceeedbc52b1f3a8"
+  digest = "1:04457f9f6f3ffc5fea48e71d62f2ca256637dee0a04d710288e27e05c8b41976"
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e1e72e9de974bd926e5c56f83753fba2df402ce5"
-  version = "v1.3.0"
+  revision = "839c75faf7f98a33d445d181f3018b5c3409a45e"
+  version = "v1.4.2"
 
 [[projects]]
   digest = "1:94d96b283e7cee29db1b0a36135e6ad9e8584f8f03155ddaf418984ec4de707a"
@@ -78,7 +78,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:48f4970b272e3df27cfe72b6fe973976779d273c12473a3c6430c1e99235f827"
+  digest = "1:746fc18681fcb6288905cda7b1dbdc51caa6cc23b05f0a9edb916eb76350b8bb"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -92,11 +92,11 @@
     "ssh/terminal",
   ]
   pruneopts = "UT"
-  revision = "c2843e01d9a2bc60bb26ad24e09734fdc2d9ec58"
+  revision = "f99c8df09eb5bff426315721bfa5f16a99cad32c"
 
 [[projects]]
   branch = "master"
-  digest = "1:7ec26cdaed34033c7997d6e1944eb482e2dda9e5dcb67db985a51d2f6ac4c27f"
+  digest = "1:7f6ce4b9f0a89047122e149c077ceb0a0e41c607f4e8c0f4ba82dadf5bcf9f1e"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -104,7 +104,7 @@
     "windows",
   ]
   pruneopts = "UT"
-  revision = "10058d7d4faa7dd5ef860cbd31af00903076e7b8"
+  revision = "7fc4e5ec1444df20dd195ae7c3bbfcd7114d3faa"
 
 [solve-meta]
   analyzer-name = "dep"
