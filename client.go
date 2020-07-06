@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/moby/moby/pkg/term"
+	"github.com/moby/term"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"

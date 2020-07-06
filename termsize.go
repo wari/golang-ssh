@@ -5,7 +5,7 @@ package ssh
 import (
 	"encoding/binary"
 
-	"github.com/moby/moby/pkg/term"
+	"github.com/moby/term"
 )
 
 // termSize gets the current window size and returns it in a window-change friendly format.
